@@ -19,6 +19,7 @@
 #include <memory>
 #include <new>
 #include <sstream> // IWYU pragma: keep
+#include <stdexcept>
 #include <stddef.h>
 #include <stdint.h>
 #include <stdio.h>
@@ -892,6 +893,10 @@ public:
     template <class t_vec>
     static void resize(t_vec & v, typename t_vec::size_type const capacity)
     {
+        if (v.m_borrowed)
+        {
+            throw std::logic_error("sdsl::memory_manager::resize: a borrowed int_vector is read-only");
+        }
         uint64_t old_capacity_in_bytes = ((v.m_capacity + 63) >> 6) << 3;
         uint64_t new_capacity_in_bytes = ((capacity + 63) >> 6) << 3;
         bool do_realloc = old_capacity_in_bytes != new_capacity_in_bytes;
@@ -920,6 +925,13 @@ public:
     template <class t_vec>
     static void clear(t_vec & v)
     {
+        // Borrowed data belongs to the caller's buffer. Just forget it, don't free, since we don't own it.
+        if (v.m_borrowed)
+        {
+            v.m_data = nullptr;
+            v.m_borrowed = false;
+            return;
+        }
         int64_t size_in_bytes = ((v.m_size + 63) >> 6) << 3;
         // remove mem
         memory_manager::free_mem(v.m_data);

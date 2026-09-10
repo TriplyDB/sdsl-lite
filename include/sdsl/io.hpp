@@ -10,6 +10,7 @@
 
 #include <algorithm>
 #include <cctype>
+#include <cstring>
 #include <functional>
 #include <iostream>
 #include <map>
@@ -121,6 +122,19 @@ template <typename T>
 void read_member(T & t, std::istream & in)
 {
     in.read((char *)&t, sizeof(t));
+}
+
+// Reads primitive-typed variable t from the start of buf, and returns the rest of buf
+template <typename T>
+[[nodiscard]] std::span<char const> read_member(T & t, std::span<char const> buf)
+{
+    static_assert(std::is_trivially_copyable_v<T>, "read_member memcpys bytes into t, so T must be trivially copyable");
+    if (buf.size() < sizeof(t))
+    {
+        throw std::out_of_range("sdsl::read_member: serialized member runs past the end of the buffer");
+    }
+    std::memcpy(&t, buf.data(), sizeof(t));
+    return buf.subspan(sizeof(t));
 }
 
 // Specialization for std::string

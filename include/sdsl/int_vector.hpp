@@ -252,6 +252,8 @@ private:
     size_type m_capacity;   //!< Number of bits reserved by int_vector.
     uint64_t * m_data;      //!< Pointer to the memory for the bits.
     int_width_type m_width; //!< Width of the integers.
+    //! Whether m_data is borrowed (see int_vector::borrow), in which case it is not freed.
+    bool m_borrowed = false;
 
 public:
     float growth_factor = 1.5; //!< Growth factor for amortized constant time operations
@@ -687,6 +689,13 @@ public:
 
     //! Load the int_vector for a stream.
     void load(std::istream & in);
+
+    //! Borrow a serialized int_vector from the start of buf, without copying its data.
+    /*!\return The rest of buf, after this function has advanced it past its own data structure.
+     *  buf is assumed not to be modified or freed through this int_vector's lifetime.
+     *  The borrowing int_vector is read-only: it must not be written through, and resizing it throws.
+     */
+    [[nodiscard]] std::span<char const> borrow(std::span<char const> buf);
 
     /* For cereal we need to define different versions of the load and save function depending on whether we want
      * binary data or text (XML/JSON) data.
@@ -1610,11 +1619,13 @@ inline int_vector<t_width>::int_vector(int_vector && v) :
     m_size(v.m_size),
     m_capacity(v.m_capacity),
     m_data(v.m_data),
-    m_width(v.m_width)
+    m_width(v.m_width),
+    m_borrowed(v.m_borrowed)
 {
     v.m_data = nullptr; // ownership of v.m_data now transfered
     v.m_size = 0;
     v.m_capacity = 0;
+    v.m_borrowed = false;
 }
 
 template <uint8_t t_width>
@@ -1656,9 +1667,11 @@ int_vector<t_width> & int_vector<t_width>::operator=(int_vector && v)
         m_data = v.m_data; // assign new memory
         m_width = v.m_width;
         m_capacity = v.m_capacity;
+        m_borrowed = v.m_borrowed;
         v.m_data = nullptr;
         v.m_size = 0;
         v.m_capacity = 0;
+        v.m_borrowed = false;
     }
     return *this;
 }
@@ -2029,6 +2042,44 @@ void int_vector<t_width>::load(std::istream & in)
         idx += conf::SDSL_BLOCK_SIZE;
     }
     in.read((char *)p, (bit_data_size() - idx) * sizeof(uint64_t));
+}
+
+template <uint8_t t_width>
+std::span<char const> int_vector<t_width>::borrow(std::span<char const> buf)
+{
+    uint64_t header = 0;
+    buf = read_member(header, buf);
+    auto const [size_in_bits, header_width] = decode_header(header);
+    // if item bitwidth is specified at compile time with the type param t_width, validate that it matches the
+    // bitwidth specified in the data's header word. t_width==0 means bitwidth is decided dynamically at runtime.
+    if (t_width > 0 and t_width != header_width)
+    {
+        throw std::invalid_argument("sdsl::int_vector::borrow: width in header does not match t_width");
+    }
+
+    // write_data stores the bits as whole 64-bit words.
+    // round size_in_bits up to words, then convert to bytes.
+    size_type data_bytes = ((size_in_bits + 63) >> 6) * sizeof(uint64_t);
+    // throw if the data structure should extend beyond the buffer
+    if (buf.size() < data_bytes)
+    {
+        throw std::out_of_range("sdsl::int_vector::borrow: data runs past the end of the buffer");
+    }
+    // throw if the data isn't aligned for uint64_t: m_data is read as uint64_t, and a misaligned read is undefined behaviour
+    if (reinterpret_cast<std::uintptr_t>(buf.data()) % alignof(uint64_t) != 0)
+    {
+        throw std::invalid_argument("sdsl::int_vector::borrow: data is not 8-byte aligned");
+    }
+
+    // Free the data this vector owned until now, if any, since m_data is about to point into buf.
+    memory_manager::clear(*this);
+
+    m_width = header_width;
+    m_size = size_in_bits;
+    m_capacity = 0;
+    m_borrowed = true;
+    m_data = const_cast<uint64_t *>(reinterpret_cast<uint64_t const *>(buf.data()));
+    return buf.subspan(data_bytes);
 }
 
 template <uint8_t t_width>
