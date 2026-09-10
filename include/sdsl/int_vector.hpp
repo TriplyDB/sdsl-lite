@@ -302,6 +302,12 @@ private:
         return (m_size + 63) >> 6;
     }
 
+    //! Split a serialized int_vector's header into its size in bits (low 56 bits) and its width (high 8 bits).
+    static std::pair<size_type, uint8_t> decode_header(uint64_t header)
+    {
+        return {header & bits::lo_set[56], (uint8_t)(header >> 56)};
+    }
+
 public:
     //! Constructor for int_vector.
     /*!\param size          Number of elements. Default value is 0.
@@ -889,8 +895,8 @@ public:
     {
         uint64_t width_and_size = 0;
         read_member(width_and_size, in);
-        size = width_and_size & bits::lo_set[56];
-        uint8_t read_int_width = (uint8_t)(width_and_size >> 56);
+        auto const [read_size, read_int_width] = decode_header(width_and_size);
+        size = read_size;
         if (t_width == 0)
         {
             int_width = read_int_width;
