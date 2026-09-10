@@ -257,6 +257,9 @@ public:
         m_rank_marked.set_vector(&m_marked);
     }
 
+    //! Not supported: int_vector::borrow would skip m_marked and m_rank_marked.
+    std::span<char const> borrow(std::span<char const> buf) = delete;
+
     template <typename archive_t>
     void CEREAL_SAVE_FUNCTION_NAME(archive_t & ar) const
     {
@@ -704,6 +707,9 @@ public:
         m_rank_marked.load(in);
         m_rank_marked.set_vector(&m_marked);
     }
+
+    //! Not supported: int_vector::borrow would skip m_marked and m_rank_marked.
+    std::span<char const> borrow(std::span<char const> buf) = delete;
 
     template <typename archive_t>
     void CEREAL_SAVE_FUNCTION_NAME(archive_t & ar) const

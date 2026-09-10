@@ -275,6 +275,18 @@ public:
         read_member(m_sigma, in);
     }
 
+    //! Borrow a serialized byte_alphabet from the start of buf, without copying its data.
+    /*!\return The rest of buf, after this function has advanced it past its own data structure.
+     *  Delegates to its members' borrow
+     */
+    [[nodiscard]] std::span<char const> borrow(std::span<char const> buf)
+    {
+        buf = m_char2comp.borrow(buf);
+        buf = m_comp2char.borrow(buf);
+        buf = m_C.borrow(buf);
+        return read_member(m_sigma, buf);
+    }
+
     //! Equality operator.
     bool operator==(byte_alphabet const & other) const noexcept
     {

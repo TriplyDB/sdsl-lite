@@ -172,6 +172,12 @@ public:
     //! Load the enc_vector from a stream.
     void load(std::istream & in);
 
+    //! Borrow a serialized enc_vector from the start of buf, without copying its data.
+    /*!\return The rest of buf, after this function has advanced it past its own data structure.
+     *  Delegates to its members' borrow
+     */
+    [[nodiscard]] std::span<char const> borrow(std::span<char const> buf);
+
     template <typename archive_t>
     void CEREAL_SAVE_FUNCTION_NAME(archive_t & ar) const;
 
@@ -400,6 +406,14 @@ void enc_vector<t_coder, t_dens, t_width>::load(std::istream & in)
     read_member(m_size, in);
     m_z.load(in);
     m_sample_vals_and_pointer.load(in);
+}
+
+template <class t_coder, uint32_t t_dens, uint8_t t_width>
+std::span<char const> enc_vector<t_coder, t_dens, t_width>::borrow(std::span<char const> buf)
+{
+    buf = read_member(m_size, buf);
+    buf = m_z.borrow(buf);
+    return m_sample_vals_and_pointer.borrow(buf);
 }
 
 template <class t_coder, uint32_t t_dens, uint8_t t_width>

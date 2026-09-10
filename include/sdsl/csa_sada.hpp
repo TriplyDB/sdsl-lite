@@ -285,6 +285,12 @@ public:
      */
     void load(std::istream & in);
 
+    //! Borrow a serialized csa_sada from the start of buf, without copying its data.
+    /*!\return The rest of buf, after this function has advanced it past its own data structure.
+     *  Delegates to its members' borrow
+     */
+    [[nodiscard]] std::span<char const> borrow(std::span<char const> buf);
+
     template <typename archive_t>
     void CEREAL_SAVE_FUNCTION_NAME(archive_t & ar) const;
 
@@ -534,6 +540,22 @@ void csa_sada<t_enc_vec, t_dens, t_inv_dens, t_sa_sample_strat, t_isa, t_alphabe
     m_sa_sample.load(in);
     m_isa_sample.load(in, &m_sa_sample);
     m_alphabet.load(in);
+}
+
+template <class t_enc_vec,
+          uint32_t t_dens,
+          uint32_t t_inv_dens,
+          class t_sa_sample_strat,
+          class t_isa,
+          class t_alphabet_strat>
+auto csa_sada<t_enc_vec, t_dens, t_inv_dens, t_sa_sample_strat, t_isa, t_alphabet_strat>::borrow(
+    std::span<char const> buf) -> std::span<char const>
+{
+    buf = m_psi.borrow(buf);
+    buf = m_sa_sample.borrow(buf);
+    buf = m_isa_sample.borrow(buf);
+    m_isa_sample.set_vector(&m_sa_sample);
+    return m_alphabet.borrow(buf);
 }
 
 template <class t_enc_vec,
